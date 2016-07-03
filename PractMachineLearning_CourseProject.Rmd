@@ -1,0 +1,199 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Manuel Ortiz"
+date: "July 2, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+# Loading the appropriate packages
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(parallel)
+library(doParallel)
+library(randomForest)
+# Setting parallel processing
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+# Local Directory
+dataPath <- "data/data_science_specialization/08_Pract_Machine_Learning"
+```
+
+## Synopsis
+
+This document covers the course project for the Practical Machine Learning, part of the Data Science Specialization created by Johns Hopkins University.  
+
+The data for this project comes from wearable fitness tracker devices such as Jawbone Up, Nike FuelBand or Fitbit, collected by the quantifield self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+
+In this project, the goal consists of using the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, whome were asked to perform barbell lifts correctly and incorrectly in 5 different ways, thus finally predicting the manner in which they did the exercise.
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+## Data processing
+
+The training data for this project are available here:
+
+```{r trainingUrl, cache = TRUE}
+trainingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+```
+
+The test data are available here:
+
+```{r testingUrl, cache = TRUE}
+testingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+```
+
+### Loading data
+
+Loading the data into memory only, since we´re not interested in saving data also on disk:
+
+```{r loading_data, cache = TRUE}
+training <- read.csv(url(trainingUrl), header=T)
+testing  <- read.csv(url(testingUrl), header=T)
+```
+
+### Data cleaning and preparation
+
+#### Data partitioning
+
+To be able to estimate the out-of-sample error further on, the training data will be splitted a smaller training set (60%) and a validation set (40%), using for it always the same seed to ensure reproducibility:
+
+```{r splitting_training, cache = TRUE}
+set.seed(2716)
+inTrain     <- createDataPartition(y = training$classe, p=0.6, list = FALSE)
+subSetTrain <- training[inTrain, ] 
+subSetTest  <- training[-inTrain, ]
+```
+
+#### Cleaning the data
+
+The following transformations have been used to clean the data:
+
+1. Removing variables which non meaningful enough to be used as predictors
+
+```{r cleaning_remove, cache = TRUE}
+# X, user_name, raw_timestamp_part_1, raw_timestamp_part_2 and cvtd_timestamp are variables that don´t make sense as predictor
+subSetTrain <- subSetTrain[, -(1:5)]
+subSetTest  <- subSetTest[, -(1:5)]
+```
+
+2. Using function *nearZeroVar()* there are itendified all those predictors having very few unique values relative to the number of samples, or said in another way, predictors nearly zero variance will be removed:
+
+```{r cleaning_nzv, cache = TRUE}
+nzv         <- nearZeroVar(subSetTrain)
+subSetTrain <- subSetTrain[, -nzv]
+subSetTest  <- subSetTest[, -nzv]
+```
+
+3. Next step is to remove predictors with too many NAs (limit used is 90% of values as NA)
+
+```{r cleaning_NAs, cache = TRUE}
+tooManyNAs  <- sapply(subSetTrain, function(x) mean(is.na(x))) > 0.90
+subSetTrain <- subSetTrain[, tooManyNAs == FALSE]
+subSetTest  <- subSetTest[, tooManyNAs == FALSE]
+```
+
+Finally and to make sure the different model algorithms will fit with the Test data provided, it is required to coerce the data into the same type:
+
+## Analysis
+
+### Using Machine Learning algorithms to fit different models
+
+The following differnt model algorithms are going to be evaluated in order to find which is the one providing the best out-of-sample accuracty:
+
+* Decision tree (rpart)
+* Stochastic gradient boosting trees (gbm)
+* Random forest decision trees (rf)
+
+```{r models_fitting, cache = TRUE, results = "hide"}
+# Setting up the TrainControl with a resampling metdhod method, the number that specifies the quantity of folds for k-fold cross-validation, and allowParallel which tells caret to use the cluster that we've registered in the previous step
+fitControl      <- trainControl(method='cv', number = 3, allowParallel = TRUE)
+# Fitting models
+modFit_rpart    <- train(classe ~ ., data = subSetTrain, trControl = fitControl, 
+                         method = "rpart")
+modFit_gbm      <- train(classe ~ ., data = subSetTrain, trControl = fitControl, 
+                         method = "gbm")
+modFit_rf       <- train(classe ~ ., data = subSetTrain, trControl = fitControl,
+                         method = "rf", ntree = 5)
+```
+
+### Assessing models (out-of-sample error)
+
+Using the validation set previously created from the training data set to predict all above model:
+
+```{r models_prediction, cache = TRUE}
+pred_rpart  <- predict(modFit_rpart, newdata = subSetTest)
+pred_gbm    <- predict(modFit_gbm, newdata = subSetTest)
+pred_rf     <- predict(modFit_rf, newdata = subSetTest, ntree = 5)
+```
+
+Once predictions are calculated, the fowolling step is to measure the accuracy of each model:
+
+```{r models_accuracy, cache = TRUE}
+cm_rpart    <- confusionMatrix(pred_rpart, subSetTest$classe)
+cm_gbm      <- confusionMatrix(pred_gbm, subSetTest$classe)
+cm_rf       <- confusionMatrix(pred_rf, subSetTest$classe)
+AccuracyDF  <- data.frame(
+                    Model = c("RPART","GBM","RF"),
+                    Accuracy = rbind(cm_rpart$overall[1],
+                                     cm_gbm$overall[1],
+                                     cm_rf$overall[1])
+)
+AccuracyDF
+```
+
+According to above results for all the three models assessed, it looks like both gradient boosting (gbm) and random forests (rf) are performing much better than decision tree (rpart) model, and being random forest slightly more accurate.
+
+Below can be found the confusion matrix for the three different models, sorted from lowest to highest accuracy results:
+
+```{r confMatrix_rpart, cache = TRUE}
+# RPART model confusion matrix 
+cm_rpart$table
+```
+
+```{r confMatrix_gbm, cache = TRUE}
+# GBM model confusion matrix 
+cm_gbm$table
+```
+
+```{r confMatrix_rf, cache = TRUE}
+# RF model confusion matrix 
+cm_rf$table
+```
+
+One possible last step could be to create a new model by stacking all the three above predictions together, but given the high accuracy obtained with two out of the three models, specially the ranndom forests model, it makes little sense to perform that latest step, thus taking the random forests model as the most appropiated model to work with it in the validation dataset.
+
+### Predictions
+
+To finalize the assignment, the test data set provided ('pml-training.csv') will be used to predict a classe for each of the 20 sample observations based on the most accurated model below assessed, the random forests model.
+
+```{r validation, cache = TRUE}
+pred_test  <- predict(modFit_rf, newdata = testing)
+
+testingResults <- data.frame(
+                        case = testing$problem_id,
+                        prediction = pred_test
+                  )
+print(testingResults)
+```
+
+## Conclusion
+
+Despite the amount of variables well with a high percentage missing data in the samples, or on the other side low variability, the random forests (rf) model with cross-validation produces a quite accurate model, enough for predictive analytics.
+
+Some other models have been also evaluated with univen results, while gradient boosting (gbm) was pretty close to the random forests (rf) model, the decision tree (rpart) model was far from the first two.
+
+## Annex 1: R and package versions used
+
+Some information about the packages used, their versions, the R version, environment, etc.
+
+```{r session_info}
+library(devtools)
+devtools::session_info()
+```
+
+
