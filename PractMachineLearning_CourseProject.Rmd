@@ -26,9 +26,9 @@ dataPath <- "data/data_science_specialization/08_Pract_Machine_Learning"
 
 This document covers the course project for the Practical Machine Learning, part of the Data Science Specialization created by Johns Hopkins University.  
 
-The data for this project comes from wearable fitness tracker devices such as Jawbone Up, Nike FuelBand or Fitbit, collected by the quantifield self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+The data for this project comes from a varies set of wearable fitness tracker devices available, copiled by a group of research and development for wearable components who takes measurements about themselves regularly to find patterns in user's behavior in order to improve the way users perform their activity.
 
-In this project, the goal consists of using the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, whome were asked to perform barbell lifts correctly and incorrectly in 5 different ways, thus finally predicting the manner in which they did the exercise.
+In this project, the goal consists of using the data collected by the various sensors available on these type of devices from six users whome were asked to perform barbell lifts correctly and incorrectly in 5 different ways, with the objective of predicting the manner in which they did the exercise.
 
 More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
 
